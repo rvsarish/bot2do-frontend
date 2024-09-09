@@ -21,19 +21,62 @@ const SearchPage = () => {
     country: ''
   });
 
+  const [showFilter, setShowFilter] = useState({
+    unique_id: false,
+    first_name: false,
+    surname: false,
+    village: false,
+    state: false,
+    country: false
+  });
+
+  const [frequentWords, setFrequentWords] = useState({
+    unique_id: [],
+    first_name: [],
+    surname: [],
+    village: [],
+    state: [],
+    country: []
+  });
+
+  const [filterSearch, setFilterSearch] = useState({
+    unique_id: '',
+    first_name: '',
+    surname: '',
+    village: '',
+    state: '',
+    country: ''
+  });
+
+  useEffect(() => {
+    fetchFrequentWords();
+  }, []);
+
   useEffect(() => {
     fetchData();
   }, [page, limit, search, filters]);
+
+  const fetchFrequentWords = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/frequent-words');
+      if (!response.ok) throw new Error('Failed to fetch frequent words.');
+      const result = await response.json();
+      setFrequentWords(result);
+    } catch (error) {
+      console.error('Error fetching frequent words:', error);
+    }
+  };
 
   const fetchData = async () => {
     try {
       const queryString = new URLSearchParams({ page, limit, ...filters });
       const response = await fetch(`http://localhost:5000/api/datas?${queryString.toString()}`);
+      if (!response.ok) throw new Error('Failed to fetch data.');
       const result = await response.json();
       setData(result.data);
       setTotal(result.total);
     } catch (error) {
-      console.error(error);
+      console.error('Error fetching data:', error);
     }
   };
 
@@ -42,96 +85,25 @@ const SearchPage = () => {
     setPage(1);
   };
 
-  const handleDelete = async (uniqueId) => {
-    try {
-      await fetch(`http://localhost:5000/api/datas/${uniqueId}`, {
-        method: 'DELETE',
-      });
-      fetchData(); 
-      setSuccessMessage('Item deleted successfully!');
-      setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (error) {
-      console.error(error);
-    }
+  const toggleFilterBox = (field) => {
+    setShowFilter((prevState) => ({
+      ...prevState,
+      [field]: !prevState[field]
+    }));
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedItems.size === 0) {
-      alert('No items selected for deletion.');
-      return;
-    }
-
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete ${selectedItems.size} item(s)?`
-    );
-
-    if (confirmDelete) {
-      try {
-        await Promise.all(
-          Array.from(selectedItems).map(id =>
-            fetch(`http://localhost:5000/api/datas/${id}`, {
-              method: 'DELETE',
-            })
-          )
-        );
-        setSelectedItems(new Set()); 
-        fetchData();
-        setSuccessMessage('Selected items deleted successfully!');
-        setTimeout(() => setSuccessMessage(''), 3000);
-      } catch (error) {
-        console.error(error);
-      }
-    }
-  };
-
-  const handleEdit = (item) => {
-    setEditingItem({ ...item });
-  };
-
-  const handleUpdate = async () => {
-    if (!editingItem) return;
-
-    const newErrors = validateForm(editingItem);
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    try {
-      await fetch(`http://localhost:5000/api/datas/${editingItem.unique_id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingItem),
-      });
-      setEditingItem(null);
-      setSuccessMessage('Update successful!');
-      fetchData();
-      setTimeout(() => setSuccessMessage(''), 3000); 
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const validateForm = (item) => {
-    const errors = {};
-    if (!item.first_name) errors.first_name = 'First name is required';
-    if (!item.surname) errors.surname = 'Surname is required';
-    
-    return errors;
+  const applyFrequentFilter = (word, field) => {
+    setFilters({ ...filters, [field]: word });
+    setShowFilter({ ...showFilter, [field]: false });
   };
 
   const handleSearchChange = (e) => {
     setSearch(e.target.value);
-    setPage(1); 
+    setPage(1);
   };
 
   const handlePageChange = (newPage) => {
     setPage(newPage);
-  };
-
-  const handleInputChange = (e, field) => {
-    setEditingItem({ ...editingItem, [field]: e.target.value });
-    setErrors({ ...errors, [field]: '' }); 
   };
 
   const handleSelectItem = (uniqueId) => {
@@ -142,6 +114,78 @@ const SearchPage = () => {
       updatedSelection.add(uniqueId);
     }
     setSelectedItems(updatedSelection);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedItems.size === 0) {
+      alert('No items selected for deletion.');
+      return;
+    }
+
+    const confirmation = window.confirm('Are you sure you want to delete the selected items?');
+    if (!confirmation) return;
+
+    try {
+      const response = await fetch('http://localhost:5000/api/datas/bulk-delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ids: Array.from(selectedItems) })
+      });
+
+      if (response.ok) {
+        setSuccessMessage('Selected items deleted successfully.');
+        fetchData(); // Re-fetch the updated data after deletion
+        setSelectedItems(new Set()); // Clear selected items
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Error deleting selected items:', error);
+    }
+  };
+
+  const handleFilterSearchChange = (e, field) => {
+    setFilterSearch({ ...filterSearch, [field]: e.target.value });
+  };
+
+  const filteredOptions = (field) => {
+    if (!Array.isArray(frequentWords[field]) || typeof filterSearch[field] !== 'string') {
+      return [];
+    }
+
+    return frequentWords[field].filter((word) => {
+      if (typeof word !== 'string') return false;
+      return word.toLowerCase().includes(filterSearch[field].toLowerCase());
+    });
+  };
+
+  const handleEdit = (item) => {
+    // Add your edit logic here
+    setEditingItem(item);
+  };
+
+  const handleDelete = async (uniqueId) => {
+    const confirmation = window.confirm('Are you sure you want to delete this item?');
+    if (!confirmation) return;
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/datas/${uniqueId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        setSuccessMessage('Item deleted successfully.');
+        fetchData();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Error deleting item:', error);
+    }
   };
 
   const pageCount = Math.ceil(total / limit);
@@ -176,81 +220,41 @@ const SearchPage = () => {
                       checked={selectedItems.size === data.length}
                     />
                   </th>
-                  <th className="py-2 px-2 border-b">Unique ID</th>
-                  <th className="py-2 px-2 border-b">First Name</th>
-                  <th className="py-2 px-2 border-b">Middle Name</th>
-                  <th className="py-2 px-2 border-b">Surname</th>
-                  <th className="py-2 px-2 border-b">Village</th>
-                  <th className="py-2 px-2 border-b">Address</th>
-                  <th className="py-2 px-2 border-b">Pincode</th>
-                  <th className="py-2 px-2 border-b">State</th>
-                  <th className="py-2 px-2 border-b">Country</th>
-                  <th className="py-2 px-2 border-b">Phone No. 1</th>
-                  <th className="py-2 px-2 border-b">Phone No. 2</th>
+                  {['Unique ID', 'First Name', 'Surname', 'Village', 'State', 'Country'].map((column, index) => (
+                    <th key={index} className="py-2 px-2 border-b relative">
+                      {column}
+                      <button
+                        className="ml-2 text-gray-500 hover:text-gray-700"
+                        onClick={() => toggleFilterBox(column.toLowerCase().replace(' ', '_'))}
+                      >
+                        <i className="fas fa-filter"></i>
+                      </button>
+                      {showFilter[column.toLowerCase().replace(' ', '_')] && (
+                        <div className="absolute bg-white shadow-lg p-4 rounded-lg top-10 z-10">
+                          <input
+                            type="text"
+                            placeholder={`Search ${column}`}
+                            value={filterSearch[column.toLowerCase().replace(' ', '_')]}
+                            onChange={(e) => handleFilterSearchChange(e, column.toLowerCase().replace(' ', '_'))}
+                            className="w-full mb-2 px-2 py-1 border rounded-lg"
+                          />
+                          <div className="flex flex-col max-h-40 overflow-auto">
+                            {filteredOptions(column.toLowerCase().replace(' ', '_')).map((word) => (
+                              <label key={word}>
+                                <input
+                                  type="checkbox"
+                                  onClick={() => applyFrequentFilter(word, column.toLowerCase().replace(' ', '_'))}
+                                  className="mr-2"
+                                />
+                                {word}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </th>
+                  ))}
                   <th className="py-2 px-2 border-b">Actions</th>
-                </tr>
-                <tr>
-                  <th className="py-2 px-2 border-b"></th>
-                  <th className="py-2 px-2 border-b">
-                    <input
-                      type="text"
-                      placeholder="Filter by Unique ID"
-                      value={filters.unique_id}
-                      onChange={(e) => handleFilterChange(e, 'unique_id')}
-                      className="w-full px-2 py-1 border rounded-lg"
-                    />
-                  </th>
-                  <th className="py-2 px-2 border-b">
-                    <input
-                      type="text"
-                      placeholder="Filter by First Name"
-                      value={filters.first_name}
-                      onChange={(e) => handleFilterChange(e, 'first_name')}
-                      className="w-full px-2 py-1 border rounded-lg"
-                    />
-                  </th>
-                  <th className="py-2 px-2 border-b"></th>
-                  <th className="py-2 px-2 border-b">
-                    <input
-                      type="text"
-                      placeholder="Filter by Surname"
-                      value={filters.surname}
-                      onChange={(e) => handleFilterChange(e, 'surname')}
-                      className="w-full px-2 py-1 border rounded-lg"
-                    />
-                  </th>
-                  <th className="py-2 px-2 border-b">
-                    <input
-                      type="text"
-                      placeholder="Filter by Village"
-                      value={filters.village}
-                      onChange={(e) => handleFilterChange(e, 'village')}
-                      className="w-full px-2 py-1 border rounded-lg"
-                    />
-                  </th>
-                  <th className="py-2 px-2 border-b"></th>
-                  <th className="py-2 px-2 border-b"></th>
-                  <th className="py-2 px-2 border-b">
-                    <input
-                      type="text"
-                      placeholder="Filter by State"
-                      value={filters.state}
-                      onChange={(e) => handleFilterChange(e, 'state')}
-                      className="w-full px-2 py-1 border rounded-lg"
-                    />
-                  </th>
-                  <th className="py-2 px-2 border-b">
-                    <input
-                      type="text"
-                      placeholder="Filter by Country"
-                      value={filters.country}
-                      onChange={(e) => handleFilterChange(e, 'country')}
-                      className="w-full px-2 py-1 border rounded-lg"
-                    />
-                  </th>
-                  <th className="py-2 px-2 border-b"></th>
-                  <th className="py-2 px-2 border-b"></th>
-                  <th className="py-2 px-2 border-b"></th>
                 </tr>
               </thead>
               <tbody>
@@ -265,27 +269,22 @@ const SearchPage = () => {
                     </td>
                     <td className="py-2 px-2 border-b">{item.unique_id}</td>
                     <td className="py-2 px-2 border-b">{item.first_name}</td>
-                    <td className="py-2 px-2 border-b">{item.middle_name}</td>
                     <td className="py-2 px-2 border-b">{item.surname}</td>
                     <td className="py-2 px-2 border-b">{item.village}</td>
-                    <td className="py-2 px-2 border-b">{item.address}</td>
-                    <td className="py-2 px-2 border-b">{item.pincode}</td>
                     <td className="py-2 px-2 border-b">{item.state}</td>
                     <td className="py-2 px-2 border-b">{item.country}</td>
-                    <td className="py-2 px-2 border-b">{item.phone_no1}</td>
-                    <td className="py-2 px-2 border-b">{item.phone_no2}</td>
                     <td className="py-2 px-2 border-b">
                       <button
-                        className="text-blue-500 hover:text-blue-700"
                         onClick={() => handleEdit(item)}
+                        className="text-blue-500 hover:underline"
                       >
-                        <i className="fas fa-edit"></i>
+                        Edit
                       </button>
                       <button
-                        className="ml-2 text-red-500 hover:text-red-700"
                         onClick={() => handleDelete(item.unique_id)}
+                        className="text-red-500 hover:underline ml-2"
                       >
-                        <i className="fas fa-trash"></i>
+                        Delete
                       </button>
                     </td>
                   </tr>
@@ -294,107 +293,29 @@ const SearchPage = () => {
             </table>
           </div>
 
-          <div className="flex justify-between mt-4">
-            <div>
-              <span className="text-gray-700">Rows per page: </span>
-              <select
-                value={limit}
-                onChange={(e) => setLimit(parseInt(e.target.value, 10))}
-                className="ml-2 px-2 py-1 border border-gray-300 rounded-lg"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            </div>
-
-            <div>
-              <button
-                onClick={() => handlePageChange(page - 1)}
-                disabled={page === 1}
-                className="px-3 py-1 mx-1 text-white bg-gray-600 rounded disabled:bg-gray-300"
-              >
-                Previous
-              </button>
-              <span className="text-gray-700">
-                Page {page} of {pageCount}
-              </span>
-              <button
-                onClick={() => handlePageChange(page + 1)}
-                disabled={page === pageCount}
-                className="px-3 py-1 mx-1 text-white bg-gray-600 rounded disabled:bg-gray-300"
-              >
-                Next
-              </button>
-            </div>
-
+          <div className="mt-4">
             <button
               onClick={handleBulkDelete}
-              className="px-3 py-1 text-white bg-red-500 rounded hover:bg-red-600"
+              className="bg-red-500 text-white px-4 py-2 rounded-md"
             >
-              Delete Selected
+              Delete Selected Items
             </button>
           </div>
 
-          {editingItem && (
-            <div className="mt-6">
-              <h3 className="text-xl font-semibold">Edit Item</h3>
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div>
-                  <label className="block text-sm font-medium">First Name</label>
-                  <input
-                    type="text"
-                    value={editingItem.first_name}
-                    onChange={(e) => handleInputChange(e, 'first_name')}
-                    className={`w-full px-3 py-2 border ${
-                      errors.first_name ? 'border-red-500' : 'border-gray-300'
-                    } rounded-lg`}
-                  />
-                  {errors.first_name && (
-                    <span className="text-sm text-red-500">{errors.first_name}</span>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium">Middle Name</label>
-                  <input
-                    type="text"
-                    value={editingItem.middle_name}
-                    onChange={(e) => handleInputChange(e, 'middle_name')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium">Surname</label>
-                  <input
-                    type="text"
-                    value={editingItem.surname}
-                    onChange={(e) => handleInputChange(e, 'surname')}
-                    className={`w-full px-3 py-2 border ${
-                      errors.surname ? 'border-red-500' : 'border-gray-300'
-                    } rounded-lg`}
-                  />
-                  {errors.surname && (
-                    <span className="text-sm text-red-500">{errors.surname}</span>
-                  )}
-                </div>
-              </div>
-              <div className="flex justify-end mt-4">
-                <button
-                  onClick={handleUpdate}
-                  className="px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </div>
-          )}
+          <div className="mt-4">
+            {Array.from({ length: pageCount }, (_, i) => (
+              <button
+                key={i}
+                onClick={() => handlePageChange(i + 1)}
+                className={`mx-1 px-3 py-1 rounded-lg ${i + 1 === page ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
 
           {successMessage && (
-            <div className="mt-4 text-green-600 font-semibold">
+            <div className="mt-4 text-green-500">
               {successMessage}
             </div>
           )}

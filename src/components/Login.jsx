@@ -1,4 +1,4 @@
-import  { useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
@@ -8,7 +8,7 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    try {
       const response = await fetch('http://localhost:5000/api/login', {
         method: 'POST',
         headers: {
@@ -26,7 +26,10 @@ const Login = () => {
       } else {
         alert(data.message || 'Login failed');
       }
-  
+    } catch (error) {
+      console.error('Login error:', error);
+      alert('An error occurred during login. Please try again.');
+    }
   };
 
   return (
@@ -35,8 +38,11 @@ const Login = () => {
         <h2 className="text-2xl font-bold text-center text-[#7695FF]">Login</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Username</label>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+              Username
+            </label>
             <input
+              id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -45,8 +51,11 @@ const Login = () => {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              Password
+            </label>
             <input
+              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
